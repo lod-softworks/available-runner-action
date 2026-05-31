@@ -1,5 +1,7 @@
 # available-runner-action
 
+![Node.js](https://img.shields.io/badge/node.js-20-brightgreen?logo=nodedotjs)
+
 A GitHub Action that detects whether a preferred self-hosted runner is available and automatically falls back to a GitHub-hosted runner when none can be found. Use it to keep CI/CD pipelines running even when on-premises infrastructure is offline.
 
 ---
