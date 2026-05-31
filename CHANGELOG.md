@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fail-if-no-runner` input: when `true`, the action fails instead of falling back.
 - `github-token` input: optional token override for the GitHub Actions API.
 - `runner` output: JSON-encoded value suitable for use with `fromJSON()` in `runs-on`.
-- `selected_type` output: `self-hosted` or `github-hosted`.
+- `selected-type` output: `self-hosted` or `github-hosted`.
 - `diagnostics` output: human-readable explanation of the selection.
 - Repository-scope runner query via `GET /repos/{owner}/{repo}/actions/runners`.
 - Organization-scope runner query via `GET /orgs/{org}/actions/runners`.

@@ -48,7 +48,7 @@ outputs:
       Returns a JSON array for self-hosted runners (e.g. ["self-hosted","linux"])
       or a JSON string for GitHub-hosted runners (e.g. "ubuntu-latest").
 
-  selected_type:
+  selected-type:
     description: >
       Indicates which kind of runner was selected.
       Values: self-hosted | github-hosted

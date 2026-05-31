@@ -30134,7 +30134,7 @@ async function run() {
         return;
     }
     core.setOutput('runner', result.runner);
-    core.setOutput('selected_type', result.selectedType);
+    core.setOutput('selected-type', result.selectedType);
     core.setOutput('diagnostics', result.diagnostics);
 }
 if (require.main === require.cache[eval('__filename')]) {

@@ -62,7 +62,7 @@ The default `GITHUB_TOKEN` is sufficient for repository-scope runner queries. Fo
 | Output | Values | Description |
 |--------|--------|-------------|
 | `runner` | JSON string or array | Pass directly to `runs-on` via `fromJSON()`. Returns a JSON array for self-hosted runners and a JSON string for GitHub-hosted runners. |
-| `selected_type` | `self-hosted` \| `github-hosted` | Indicates which kind of runner was selected. Useful for conditional steps in the dependent job. |
+| `selected-type` | `self-hosted` \| `github-hosted` | Indicates which kind of runner was selected. Useful for conditional steps in the dependent job. |
 | `diagnostics` | string | Human-readable explanation of the selection, including runner counts and any API errors. |
 
 ---
@@ -153,7 +153,7 @@ Fail the workflow immediately if no self-hosted runner is available, rather than
 
 ### Branch on runner type
 
-Use `selected_type` to adjust downstream step behaviour depending on which runner was selected.
+Use `selected-type` to adjust downstream step behaviour depending on which runner was selected.
 
 ```yaml
 jobs:
@@ -161,7 +161,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       runner: ${{ steps.pick.outputs.runner }}
-      runner_type: ${{ steps.pick.outputs.selected_type }}
+      runner_type: ${{ steps.pick.outputs.selected-type }}
     steps:
       - id: pick
         uses: lod-softworks/available-runner-action@v1

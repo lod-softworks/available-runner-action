@@ -340,7 +340,7 @@ describe('run()', () => {
       'runner',
       JSON.stringify(['self-hosted', 'linux']),
     );
-    expect(mockSetOutput).toHaveBeenCalledWith('selected_type', 'self-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'self-hosted');
   });
 
   it('sets github-hosted outputs when no runner matches', async () => {
@@ -354,7 +354,7 @@ describe('run()', () => {
       'runner',
       JSON.stringify('ubuntu-latest'),
     );
-    expect(mockSetOutput).toHaveBeenCalledWith('selected_type', 'github-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'github-hosted');
   });
 
   it('fails when preferred-labels is empty', async () => {
@@ -398,7 +398,7 @@ describe('run()', () => {
 
     await run();
 
-    expect(mockSetOutput).toHaveBeenCalledWith('selected_type', 'self-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'self-hosted');
   });
 
   it('falls back gracefully when both APIs throw errors', async () => {
@@ -409,7 +409,7 @@ describe('run()', () => {
     await run();
 
     expect(mockSetFailed).not.toHaveBeenCalled();
-    expect(mockSetOutput).toHaveBeenCalledWith('selected_type', 'github-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'github-hosted');
     const diagnosticsCall = mockSetOutput.mock.calls.find(c => c[0] === 'diagnostics');
     expect(diagnosticsCall?.[1]).toContain('Connection refused');
   });
@@ -421,6 +421,6 @@ describe('run()', () => {
 
     await run();
 
-    expect(mockSetOutput).toHaveBeenCalledWith('selected_type', 'github-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'github-hosted');
   });
 });

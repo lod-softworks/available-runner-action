@@ -251,7 +251,7 @@ export async function run(): Promise<void> {
   }
 
   core.setOutput('runner', result.runner);
-  core.setOutput('selected_type', result.selectedType);
+  core.setOutput('selected-type', result.selectedType);
   core.setOutput('diagnostics', result.diagnostics);
 }
 
