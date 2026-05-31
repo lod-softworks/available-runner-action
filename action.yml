@@ -1,0 +1,67 @@
+name: 'Available Runner Action'
+description: >
+  Detects whether a preferred self-hosted runner is available and falls back
+  to a configurable GitHub-hosted runner when none is found.
+author: 'lod-softworks'
+
+inputs:
+  preferred-labels:
+    description: >
+      Newline-separated list of runner labels. A runner must match every label
+      to be considered. Corresponds to the labels used in runs-on.
+    required: false
+    default: 'self-hosted'
+
+  fallback-runner:
+    description: >
+      The runner to use when no matching self-hosted runner is available.
+      Accepts any valid runs-on value (e.g. ubuntu-latest, windows-latest).
+    required: false
+    default: 'ubuntu-latest'
+
+  require-idle:
+    description: >
+      When true, only runners that are not currently busy are considered.
+      Set to false to allow selection of busy runners.
+    required: false
+    default: 'true'
+
+  fail-if-no-runner:
+    description: >
+      When true, the action fails instead of falling back to the github-hosted
+      runner. Useful for workflows that must run on self-hosted infrastructure.
+    required: false
+    default: 'false'
+
+  github-token:
+    description: >
+      Token used to query the GitHub Actions API. Defaults to the workflow
+      GITHUB_TOKEN. Requires actions: read permission. A PAT with the
+      appropriate scope is needed for organization-level runner access.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  runner:
+    description: >
+      JSON-encoded runner value suitable for use with fromJSON() in runs-on.
+      Returns a JSON array for self-hosted runners (e.g. ["self-hosted","linux"])
+      or a JSON string for GitHub-hosted runners (e.g. "ubuntu-latest").
+
+  selected-type:
+    description: >
+      Indicates which kind of runner was selected.
+      Values: self-hosted | github-hosted
+
+  diagnostics:
+    description: >
+      Human-readable explanation of the runner selection result, including
+      counts of matching/available runners and the reason for any fallback.
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'cpu'
+  color: 'blue'
