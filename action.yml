@@ -1,8 +1,6 @@
-name: 'Available Runner Action'
-description: >
-  Detects whether a preferred self-hosted runner is available and falls back
-  to a configurable GitHub-hosted runner when none is found.
-author: 'lod-softworks'
+name: Available Runner Action
+description: Determines whether requested runners are available and outputs a runs-on array of runner labels.
+author: lod-softworks
 
 inputs:
   preferred-labels:
@@ -10,28 +8,28 @@ inputs:
       Newline-separated list of runner labels. A runner must match every label
       to be considered. Corresponds to the labels used in runs-on.
     required: false
-    default: 'self-hosted'
+    default: self-hosted
 
   fallback-runner:
     description: >
       The runner to use when no matching self-hosted runner is available.
       Accepts any valid runs-on value (e.g. ubuntu-latest, windows-latest).
     required: false
-    default: 'ubuntu-latest'
+    default: ubuntu-latest
 
   require-idle:
     description: >
       When true, only runners that are not currently busy are considered.
       Set to false to allow selection of busy runners.
     required: false
-    default: 'true'
+    default: true
 
   fail-if-no-runner:
     description: >
       When true, the action fails instead of falling back to the github-hosted
       runner. Useful for workflows that must run on self-hosted infrastructure.
     required: false
-    default: 'false'
+    default: false
 
   github-token:
     description: >
@@ -59,9 +57,9 @@ outputs:
       counts of matching/available runners and the reason for any fallback.
 
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: node20
+  main: dist/index.js
 
 branding:
-  icon: 'cpu'
-  color: 'blue'
+  icon: cpu
+  color: blue
