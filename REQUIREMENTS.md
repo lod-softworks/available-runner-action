@@ -380,16 +380,11 @@ GET /orgs/{org}/actions/runners
 
 ## Permissions
 
-Required:
+V1 inventory mode requires a PAT or App installation token with repository Administration read or organization Self-hosted runners read. The normal workflow token and `actions: read` alone are insufficient.
 
-```yaml
-permissions:
-  actions: read
-```
+V2 probe mode requires only the normal short-lived workflow token with `actions: write` on the selector job. The helper has `permissions: {}` and receives no repository secrets. Leaving `probe-workflow` empty retains inventory mode and its credential requirements.
 
-No write permissions required.
-
-No secrets required.
+Document and preserve both generations: `1.0.0` / `v1.0.0` / `v1` for inventory discovery without another job, and `2.0.0` / `v2.0.0` / `v2` for the probe-capable generation. V2 must not move any v1 tag.
 
 ---
 
@@ -533,7 +528,7 @@ CHANGELOG.md
 ```
 
 
-## Secretless probe mode (1.1)
+## Secretless probe mode (v2)
 
 - The optional `probe-workflow` input dispatches a minimal helper in the same repository using only the short-lived `GITHUB_TOKEN` with `actions: write`.
 - Successful helper completion within a bounded 5–300 second window is evidence that a matching runner accepted work. No runner inventory API is called in this mode.
