@@ -62,7 +62,7 @@ They need workflows that:
 - Load balancing.
 - Queue management.
 - Auto-scaling runner infrastructure.
-- Executing jobs directly.
+- Running application builds or publishing inside the action (the optional probe helper only reports readiness).
 
 The action only determines which runner should be used.
 
@@ -380,16 +380,11 @@ GET /orgs/{org}/actions/runners
 
 ## Permissions
 
-Required:
+V1 inventory mode requires a PAT or App installation token with repository Administration read or organization Self-hosted runners read. The normal workflow token and `actions: read` alone are insufficient.
 
-```yaml
-permissions:
-  actions: read
-```
+V2 probe mode requires only the normal short-lived workflow token with `actions: write` on the selector job. The helper has `permissions: {}` and receives no repository secrets. Leaving `probe-workflow` empty retains inventory mode and its credential requirements.
 
-No write permissions required.
-
-No secrets required.
+Document and preserve both generations: `1.0.0` / `v1.0.0` / `v1` for inventory discovery without another job, and `2.0.0` / `v2.0.0` / `v2` for the probe-capable generation. V2 must not move any v1 tag.
 
 ---
 
@@ -531,3 +526,16 @@ README.md
 LICENSE
 CHANGELOG.md
 ```
+
+
+## Secretless probe mode (v2)
+
+- The optional `probe-workflow` input dispatches a minimal helper in the same repository using only the short-lived `GITHUB_TOKEN` with `actions: write`.
+- Successful helper completion within a bounded 5–300 second window is evidence that a matching runner accepted work. No runner inventory API is called in this mode.
+- Preserve existing runner/fallback outputs and `fail-if-no-runner`. `require-idle` remains an inventory-mode setting; probes measure dispatch latency instead.
+- Correlate the exact child run using dispatch response details or a unique `probe-id` run title. Never cancel the parent or an unrelated workflow run.
+- Cancel unfinished known child runs on timeout, polling errors, and parent cancellation. Surface cleanup failures as errors. Document the abrupt-host-loss orphan case.
+- The helper has `permissions: {}`, no checkout, no secrets, and only a readiness command. Application builds stay in the caller's dependent job.
+- Ephemeral infrastructure replaces the probe VM before the application job; one extra VM lifecycle and its startup delay are accepted tradeoffs for removing persistent repository credentials.
+- Inventory mode remains backward compatible. Documentation must accurately state that the default workflow token cannot list private repository/organization runners.
+- Run on Node.js 24, type-check and test both modes, and commit the generated distribution bundle.

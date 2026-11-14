@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-13
+
+### Added
+
+- Optional secretless workflow-probe mode using the normal workflow token with Actions write permission.
+- Probe helper example, bounded completion window, exact run correlation, cancellation cleanup, and failure diagnostics.
+- Bounded retries for transient 404 responses immediately after workflow dispatch.
+- Side-by-side v1 credential-based and v2 probe-based setup and migration guidance.
+
+### Changed
+
+- Correct inventory API permission documentation and explain the extra VM lifecycle for ephemeral probes.
+- Use the supported Node.js 24 action runtime.
+- Publish the probe generation as v2; preserve the existing 1.0.0, v1.0.0, and v1 tags. Inventory mode remains available in v2.
+
 ## [1.0.0] - 2026-05-31
 
 ### Added

@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
+import { probeRunner } from './probe';
 
 export interface RunnerLabel {
   id: number;
@@ -193,7 +194,7 @@ export function selectRunner(
   ];
 
   if (apiErrors.length > 0) {
-    diagnosticsLines.push('', 'API errors encountered:');
+    diagnosticsLines.push('', 'Availability checks:');
     diagnosticsLines.push(...apiErrors.map(e => `  ${e}`));
   }
 
@@ -230,11 +231,28 @@ export async function run(): Promise<void> {
   const { owner, repo } = github.context.repo;
   const octokit = github.getOctokit(token);
 
-  const { runners: allRunners, apiErrors } = await fetchAllRunners(
-    octokit,
-    owner,
-    repo,
-  );
+  const probeWorkflow = core.getInput('probe-workflow');
+  let allRunners: Runner[];
+  let apiErrors: string[];
+  let probeDiagnostics = '';
+  if (probeWorkflow) {
+    const probe = await probeRunner(octokit, {
+      owner, repo, workflow: probeWorkflow,
+      ref: core.getInput('probe-ref') || github.context.payload.repository?.default_branch || '',
+      labels: preferredLabels,
+      timeoutSeconds: Number(core.getInput('probe-timeout-seconds') || '30'),
+      parentRunId: github.context.runId,
+    });
+    probeDiagnostics = probe.diagnostics;
+    core.info(probeDiagnostics);
+    allRunners = probe.available ? [{
+      id: 0, name: 'successful-runner-probe', status: 'online', busy: false,
+      labels: preferredLabels.map(name => ({ id: 0, name, type: 'custom' })),
+    }] : [];
+    apiErrors = probe.available ? [] : [probe.diagnostics];
+  } else {
+    ({ runners: allRunners, apiErrors } = await fetchAllRunners(octokit, owner, repo));
+  }
 
   const result = selectRunner(
     allRunners,
@@ -252,7 +270,7 @@ export async function run(): Promise<void> {
 
   core.setOutput('runner', result.runner);
   core.setOutput('selected-type', result.selectedType);
-  core.setOutput('diagnostics', result.diagnostics);
+  core.setOutput('diagnostics', probeDiagnostics ? `${probeDiagnostics}\n${result.diagnostics}` : result.diagnostics);
 }
 
 if (require.main === module) {
