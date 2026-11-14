@@ -1,0 +1,24 @@
+name: Runner availability probe
+run-name: Runner availability probe ${{ inputs.probe-id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner-labels:
+        description: JSON runs-on labels provided by available-runner-action
+        required: true
+        type: string
+      probe-id:
+        description: Unique dispatch correlation ID
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 1
+    steps:
+      - name: Confirm the runner can accept work
+        run: echo Runner is ready

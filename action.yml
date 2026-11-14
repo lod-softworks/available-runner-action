@@ -31,11 +31,27 @@ inputs:
     required: false
     default: false
 
+  probe-workflow:
+    description: >
+      Optional helper workflow filename. Enables secretless probe mode using
+      the normal GITHUB_TOKEN with actions: write instead of runner-list APIs.
+    required: false
+
+  probe-ref:
+    description: Branch or tag containing the probe helper (defaults to the repository default branch).
+    required: false
+    default: ${{ github.event.repository.default_branch }}
+
+  probe-timeout-seconds:
+    description: Maximum time to wait for the probe to finish (5-300 seconds).
+    required: false
+    default: '30'
+
   github-token:
     description: >
       Token used to query the GitHub Actions API. Defaults to the workflow
-      GITHUB_TOKEN. Requires actions: read permission. A PAT with the
-      appropriate scope is needed for organization-level runner access.
+      GITHUB_TOKEN. Probe mode needs actions: write. Inventory mode needs
+      runner-list permissions unavailable to the default workflow token.
     required: false
     default: ${{ github.token }}
 
@@ -57,7 +73,7 @@ outputs:
       counts of matching/available runners and the reason for any fallback.
 
 runs:
-  using: node20
+  using: node24
   main: dist/index.js
 
 branding:

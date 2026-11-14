@@ -29969,6 +29969,7 @@ exports.selectRunner = selectRunner;
 exports.run = run;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
+const probe_1 = __nccwpck_require__(8877);
 /**
  * Parses a newline-separated label string into a trimmed, non-empty label array.
  */
@@ -30102,7 +30103,7 @@ function selectRunner(allRunners, preferredLabels, fallbackRunner, requireIdle, 
         labelDisplay,
     ];
     if (apiErrors.length > 0) {
-        diagnosticsLines.push('', 'API errors encountered:');
+        diagnosticsLines.push('', 'Availability checks:');
         diagnosticsLines.push(...apiErrors.map(e => `  ${e}`));
     }
     diagnosticsLines.push('', 'Using fallback:', effectiveFallback);
@@ -30127,7 +30128,29 @@ async function run() {
     }
     const { owner, repo } = github.context.repo;
     const octokit = github.getOctokit(token);
-    const { runners: allRunners, apiErrors } = await fetchAllRunners(octokit, owner, repo);
+    const probeWorkflow = core.getInput('probe-workflow');
+    let allRunners;
+    let apiErrors;
+    let probeDiagnostics = '';
+    if (probeWorkflow) {
+        const probe = await (0, probe_1.probeRunner)(octokit, {
+            owner, repo, workflow: probeWorkflow,
+            ref: core.getInput('probe-ref') || github.context.payload.repository?.default_branch || '',
+            labels: preferredLabels,
+            timeoutSeconds: Number(core.getInput('probe-timeout-seconds') || '30'),
+            parentRunId: github.context.runId,
+        });
+        probeDiagnostics = probe.diagnostics;
+        core.info(probeDiagnostics);
+        allRunners = probe.available ? [{
+                id: 0, name: 'successful-runner-probe', status: 'online', busy: false,
+                labels: preferredLabels.map(name => ({ id: 0, name, type: 'custom' })),
+            }] : [];
+        apiErrors = probe.available ? [] : [probe.diagnostics];
+    }
+    else {
+        ({ runners: allRunners, apiErrors } = await fetchAllRunners(octokit, owner, repo));
+    }
     const result = selectRunner(allRunners, preferredLabels, fallbackRunner, requireIdle, failIfNoRunner, apiErrors);
     if ('failed' in result) {
         core.setFailed(result.reason);
@@ -30135,10 +30158,119 @@ async function run() {
     }
     core.setOutput('runner', result.runner);
     core.setOutput('selected-type', result.selectedType);
-    core.setOutput('diagnostics', result.diagnostics);
+    core.setOutput('diagnostics', probeDiagnostics ? `${probeDiagnostics}\n${result.diagnostics}` : result.diagnostics);
 }
 if (require.main === require.cache[eval('__filename')]) {
     run().catch(err => core.setFailed(err instanceof Error ? err.message : String(err)));
+}
+
+
+/***/ }),
+
+/***/ 8877:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.probeRunner = probeRunner;
+const node_crypto_1 = __nccwpck_require__(7598);
+const promises_1 = __nccwpck_require__(8500);
+function message(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+/** Dispatches a token-free helper job, then cancels any unclaimed probe. */
+async function probeRunner(octokit, options) {
+    if (!/^[\w.-]+\.ya?ml$/.test(options.workflow)) {
+        throw new Error('probe-workflow must be a workflow filename, such as available-runner-probe.yml.');
+    }
+    if (!options.ref)
+        throw new Error('probe-ref must identify a branch or tag containing the helper workflow.');
+    if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 5 || options.timeoutSeconds > 300) {
+        throw new Error('probe-timeout-seconds must be an integer between 5 and 300.');
+    }
+    const controller = new AbortController();
+    const interrupt = () => controller.abort();
+    process.once('SIGINT', interrupt);
+    process.once('SIGTERM', interrupt);
+    const deadline = Date.now() + options.timeoutSeconds * 1000;
+    const probeId = (0, node_crypto_1.randomUUID)();
+    let runId;
+    let completed = false;
+    let dispatched = false;
+    try {
+        const response = await octokit.request('POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches', {
+            owner: options.owner,
+            repo: options.repo,
+            workflow_id: options.workflow,
+            ref: options.ref,
+            inputs: { 'runner-labels': JSON.stringify(options.labels), 'probe-id': probeId },
+            return_run_details: true,
+            headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+            request: { signal: controller.signal, timeout: 10000 },
+        });
+        dispatched = true;
+        const returnedId = response.data?.workflow_run_id;
+        if (typeof returnedId === 'number' && Number.isSafeInteger(returnedId) && returnedId > 0 && returnedId !== options.parentRunId) {
+            runId = returnedId;
+        }
+        else {
+            // Older GitHub servers can return 204 despite accepting the dispatch.
+            // Correlate by an unpredictable run title rather than guessing the newest run.
+            while (!runId && Date.now() < deadline) {
+                const response = await octokit.rest.actions.listWorkflowRuns({
+                    owner: options.owner, repo: options.repo, workflow_id: options.workflow,
+                    event: 'workflow_dispatch', per_page: 100,
+                    request: { signal: controller.signal, timeout: 10000 },
+                });
+                runId = response.data.workflow_runs.find(run => run.display_title === `Runner availability probe ${probeId}` && run.id !== options.parentRunId)?.id;
+                if (!runId)
+                    await (0, promises_1.setTimeout)(1000, undefined, { signal: controller.signal });
+            }
+            if (!runId)
+                throw new Error('Could not identify the dispatched probe. Check the helper workflow run-name and cancel any orphaned probe.');
+        }
+        while (Date.now() < deadline) {
+            const { data: run } = await octokit.rest.actions.getWorkflowRun({
+                owner: options.owner, repo: options.repo, run_id: runId,
+                request: { signal: controller.signal, timeout: 10000 },
+            });
+            if (run.status === 'completed') {
+                completed = true;
+                return {
+                    available: run.conclusion === 'success',
+                    diagnostics: `Runner probe #${runId} completed with ${run.conclusion}.`,
+                };
+            }
+            await (0, promises_1.setTimeout)(Math.min(2000, Math.max(1, deadline - Date.now())), undefined, { signal: controller.signal });
+        }
+        return { available: false, diagnostics: `Runner probe #${runId} did not complete within ${options.timeoutSeconds} seconds.` };
+    }
+    catch (error) {
+        if (controller.signal.aborted)
+            throw new Error('Runner probe interrupted.');
+        if (dispatched && !runId)
+            throw new Error(`Could not identify the dispatched probe: ${message(error)}`);
+        return { available: false, diagnostics: `Runner probe unavailable: ${message(error)}` };
+    }
+    finally {
+        process.removeListener('SIGINT', interrupt);
+        process.removeListener('SIGTERM', interrupt);
+        if (runId && !completed) {
+            try {
+                await octokit.rest.actions.cancelWorkflowRun({
+                    owner: options.owner, repo: options.repo, run_id: runId,
+                    request: { timeout: 10000 },
+                });
+            }
+            catch (error) {
+                // Completion may race cancellation; GitHub returns 409 for that case.
+                if (error.status !== 409) {
+                    throw new Error(`Could not cancel runner probe #${runId}: ${message(error)}. Cancel it in GitHub Actions.`);
+                }
+            }
+        }
+    }
 }
 
 
@@ -30269,6 +30401,14 @@ module.exports = require("node:events");
 
 "use strict";
 module.exports = require("node:stream");
+
+/***/ }),
+
+/***/ 8500:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:timers/promises");
 
 /***/ }),
 

@@ -1,10 +1,52 @@
 # available-runner-action
 
-![Node.js](https://img.shields.io/badge/node.js-20-brightgreen?logo=nodedotjs)
+![Node.js](https://img.shields.io/badge/node.js-24-brightgreen?logo=nodedotjs)
 
 A GitHub Action that detects whether a preferred self-hosted runner is available and automatically falls back to a GitHub-hosted runner when none can be found. Use it to keep CI/CD pipelines running even when on-premises infrastructure is offline.
 
 ---
+
+## Secretless runner probes
+
+Set `probe-workflow` to use the normal, short-lived `GITHUB_TOKEN`. No PAT, GitHub App private key, runner-list permission, or external availability service is needed in the calling repository. Give the selection job `actions: write` so it can dispatch, monitor, and cancel its own helper run.
+
+1. Copy [`examples/available-runner-probe.yml`](examples/available-runner-probe.yml) into the consuming repository as `.github/workflows/available-runner-probe.yml` and merge it to the default branch. GitHub must register the helper workflow before it can be dispatched. After it has run at least once, GitHub also supports dispatching a branch or tag that contains it.
+2. Use the action in a GitHub-hosted selection job:
+
+```yaml
+jobs:
+  select-runner:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    steps:
+      - id: pick
+        uses: lod-softworks/available-runner-action@v1
+        with:
+          probe-workflow: available-runner-probe.yml
+          preferred-labels: |
+            self-hosted
+            macOS
+            ARM64
+          fallback-runner: macos-26
+          probe-timeout-seconds: '30'
+
+  build:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runner) }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet build
+```
+
+The helper only prints a readiness message. It has no token permissions, checks out no source, and receives no repository secrets. The action selects self-hosted labels only after the helper completes successfully. If the probe times out, fails, or cannot be dispatched, it uses the configured fallback (or honors `fail-if-no-runner`). Unfinished probes with known run IDs are cancelled on timeout, polling failure, or parent cancellation. A cancellation failure is a hard error so queued work is not silently abandoned. If a server accepts a dispatch without returning its run ID, the helper's unique `run-name` correlates that run; retain the example's `probe-id` input and run-name.
+
+Probe mode measures whether a runner can accept a job within the configured window; it does not read current runner inventory. `require-idle` applies only to inventory mode. The action does not reserve the runner after the probe, so normal scheduling races remain. With ephemeral runners, the probe consumes one VM and the application build waits for a fresh replacement. An abrupt loss of the hosted selector before it can run cleanup can leave a child probe queued; cancel it in Actions. Never attach application build or publishing steps to the probe helper.
+
+`probe-ref` defaults to the repository's default branch. Override it with a trusted branch or tag containing the helper when validating changes. Fork pull requests should remain on hosted infrastructure; do not grant write permissions to untrusted workflows. GitHub Enterprise installations need workflow-dispatch support; the existing inventory mode remains available when probe mode is not configured.
 
 ## Why this action exists
 
@@ -16,7 +58,7 @@ Typical use case: a team runs build jobs on a private server for speed and cost 
 
 ## How it works
 
-The action runs as a small, fast pre-job step. It queries the GitHub Actions API for all self-hosted runners visible to the workflow (at repository and organization scope), checks which ones are online and not busy, and returns a `runner` output that the dependent job uses in its `runs-on` field.
+In inventory mode, the action runs as a small pre-job step. It queries the GitHub Actions API for all self-hosted runners visible to the workflow (at repository and organization scope), checks which ones are online and not busy, and returns a `runner` output that the dependent job uses in its `runs-on` field.
 
 ```
 Workflow
@@ -45,7 +87,7 @@ permissions:
   actions: read
 ```
 
-The default `GITHUB_TOKEN` is sufficient for repository-scope runner queries. For organization-scope runner access a personal access token with `manage_runners:org` read scope may be required depending on the organization's settings.
+Inventory mode requires the runner-list API permissions: repository Administration read or organization Self-hosted runners read. The default `GITHUB_TOKEN` does not supply these permissions. Use secretless probe mode above to avoid a separate credential.
 
 ---
 
@@ -57,7 +99,10 @@ The default `GITHUB_TOKEN` is sufficient for repository-scope runner queries. Fo
 | `fallback-runner` | string | `ubuntu-latest` | Runner to use when no self-hosted runner is available. Any valid `runs-on` value is accepted. |
 | `require-idle` | boolean | `true` | When `true`, busy runners are excluded. Set to `false` to allow selecting a runner that is currently executing another job. |
 | `fail-if-no-runner` | boolean | `false` | When `true`, the action fails the workflow instead of using the fallback runner. Useful for jobs that must run on specific infrastructure. |
-| `github-token` | string | `github.token` | Token for GitHub API calls. Override when you need organization-level runner access with a PAT. |
+| `probe-workflow` | string | empty | Helper workflow filename; enables secretless probe mode. |
+| `probe-ref` | string | repository default branch | Trusted branch or tag containing the helper. |
+| `probe-timeout-seconds` | integer | `30` | Probe completion window, from 5 to 300 seconds. |
+| `github-token` | string | `github.token` | Normal workflow token with Actions write in probe mode; privileged runner-read token in inventory mode. |
 
 ## Outputs
 

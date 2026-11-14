@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
+import { probeRunner } from '../src/probe';
 import {
   parseLabels,
   runnerMatchesLabels,
@@ -12,6 +13,7 @@ import {
 
 jest.mock('@actions/core');
 jest.mock('@actions/github');
+jest.mock('../src/probe');
 
 const mockCore = core as jest.Mocked<typeof core>;
 
@@ -326,6 +328,18 @@ describe('run()', () => {
       writable: true,
       configurable: true,
     });
+  });
+
+  it.each([true, false])('uses the probe without requesting runner inventory (available=%s)', async available => {
+    setupInputs({ 'probe-workflow': 'available-runner-probe.yml', 'probe-ref': 'main' });
+    const api = makeOctokit([]);
+    (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
+    (probeRunner as jest.Mock).mockResolvedValue({ available, diagnostics: 'Probe completed' });
+    await run();
+    expect(api.rest.actions.listSelfHostedRunnersForRepo).not.toHaveBeenCalled();
+    expect(api.rest.actions.listSelfHostedRunnersForOrg).not.toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', available ? 'self-hosted' : 'github-hosted');
+    expect(mockSetOutput).toHaveBeenCalledWith('diagnostics', expect.stringContaining('Probe completed'));
   });
 
   it('sets self-hosted outputs when a matching runner is available', async () => {

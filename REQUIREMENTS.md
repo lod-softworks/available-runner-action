@@ -62,7 +62,7 @@ They need workflows that:
 - Load balancing.
 - Queue management.
 - Auto-scaling runner infrastructure.
-- Executing jobs directly.
+- Running application builds or publishing inside the action (the optional probe helper only reports readiness).
 
 The action only determines which runner should be used.
 
@@ -531,3 +531,16 @@ README.md
 LICENSE
 CHANGELOG.md
 ```
+
+
+## Secretless probe mode (1.1)
+
+- The optional `probe-workflow` input dispatches a minimal helper in the same repository using only the short-lived `GITHUB_TOKEN` with `actions: write`.
+- Successful helper completion within a bounded 5–300 second window is evidence that a matching runner accepted work. No runner inventory API is called in this mode.
+- Preserve existing runner/fallback outputs and `fail-if-no-runner`. `require-idle` remains an inventory-mode setting; probes measure dispatch latency instead.
+- Correlate the exact child run using dispatch response details or a unique `probe-id` run title. Never cancel the parent or an unrelated workflow run.
+- Cancel unfinished known child runs on timeout, polling errors, and parent cancellation. Surface cleanup failures as errors. Document the abrupt-host-loss orphan case.
+- The helper has `permissions: {}`, no checkout, no secrets, and only a readiness command. Application builds stay in the caller's dependent job.
+- Ephemeral infrastructure replaces the probe VM before the application job; one extra VM lifecycle and its startup delay are accepted tradeoffs for removing persistent repository credentials.
+- Inventory mode remains backward compatible. Documentation must accurately state that the default workflow token cannot list private repository/organization runners.
+- Run on Node.js 24, type-check and test both modes, and commit the generated distribution bundle.
