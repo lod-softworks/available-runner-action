@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-11-14
+
+### Added
+
+- Explicit `mode: pat` and `mode: probe` choices in one maintained action release.
+- `mode: auto` compatibility: infer probe from `probe-workflow`, otherwise use PAT inventory.
+- Conventional `available-runner-probe.yml` helper default in explicit probe mode.
+- Fail-fast mode validation and tests proving discovery methods do not silently switch after errors.
+
+### Changed
+
+- Document both discovery methods with v3 examples, tradeoffs, token permissions, and migration guidance.
+- Preserve existing v1/v2 releases and tags as historical versions; future maintenance targets v3.
+
 ## [2.0.0] - 2026-11-13
 
 ### Added

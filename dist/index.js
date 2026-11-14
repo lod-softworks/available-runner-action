@@ -30126,15 +30126,22 @@ async function run() {
         core.setFailed('preferred-labels must not be empty');
         return;
     }
+    const requestedMode = (core.getInput('mode') || 'auto').trim().toLowerCase();
+    if (!['auto', 'pat', 'probe'].includes(requestedMode)) {
+        core.setFailed('mode must be one of: auto, pat, probe');
+        return;
+    }
+    const configuredWorkflow = core.getInput('probe-workflow');
+    const mode = requestedMode === 'auto' ? (configuredWorkflow ? 'probe' : 'pat') : requestedMode;
+    core.info(`Runner discovery mode: ${mode}`);
     const { owner, repo } = github.context.repo;
     const octokit = github.getOctokit(token);
-    const probeWorkflow = core.getInput('probe-workflow');
     let allRunners;
     let apiErrors;
     let probeDiagnostics = '';
-    if (probeWorkflow) {
+    if (mode === 'probe') {
         const probe = await (0, probe_1.probeRunner)(octokit, {
-            owner, repo, workflow: probeWorkflow,
+            owner, repo, workflow: configuredWorkflow || 'available-runner-probe.yml',
             ref: core.getInput('probe-ref') || github.context.payload.repository?.default_branch || '',
             labels: preferredLabels,
             timeoutSeconds: Number(core.getInput('probe-timeout-seconds') || '30'),
