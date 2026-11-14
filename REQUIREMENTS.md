@@ -108,7 +108,10 @@ jobs:
       runner: ${{ steps.runner.outputs.runner }}
     steps:
       - id: runner
-        uses: org/runner-fallback-action@v1
+        uses: lod-softworks/available-runner-action@v3
+        with:
+          mode: pat
+          github-token: ${{ secrets.ORG_RUNNER_PAT }}
 
   build:
     needs: select-runner
@@ -124,9 +127,11 @@ jobs:
 ## Custom Labels
 
 ```yaml
-- uses: org/runner-fallback-action@v1
+- uses: lod-softworks/available-runner-action@v3
   id: runner
   with:
+    mode: pat
+    github-token: ${{ secrets.ORG_RUNNER_PAT }}
     preferred-labels: |
       self-hosted
       windows
@@ -138,9 +143,11 @@ jobs:
 ## Custom Fallback
 
 ```yaml
-- uses: org/runner-fallback-action@v1
+- uses: lod-softworks/available-runner-action@v3
   id: runner
   with:
+    mode: pat
+    github-token: ${{ secrets.ORG_RUNNER_PAT }}
     fallback-runner: windows-latest
 ```
 
@@ -150,7 +157,7 @@ jobs:
 
 ## FR-1 Detect Runner Availability
 
-The action shall query the GitHub Actions API for available runners.
+In PAT mode, query the GitHub Actions API for runner inventory. In probe mode, dispatch and monitor a permission-free helper workflow to verify that a matching runner can accept work.
 
 Supported scopes:
 
@@ -179,7 +186,7 @@ A runner must contain every label to qualify.
 
 ## FR-3 Online Check
 
-The action shall only consider runners where:
+In PAT mode, the action shall only consider runners where:
 
 ```text
 status = online
@@ -189,7 +196,7 @@ status = online
 
 ## FR-4 Idle Check
 
-By default the action shall only consider runners where:
+In PAT mode, by default the action shall only consider runners where:
 
 ```text
 busy = false
@@ -380,11 +387,11 @@ GET /orgs/{org}/actions/runners
 
 ## Permissions
 
-V1 inventory mode requires a PAT or App installation token with repository Administration read or organization Self-hosted runners read. The normal workflow token and `actions: read` alone are insufficient.
+V3 PAT inventory mode requires a PAT or App installation token with repository Administration read or organization Self-hosted runners read. The normal workflow token and `actions: read` alone are insufficient.
 
-V2 probe mode requires only the normal short-lived workflow token with `actions: write` on the selector job. The helper has `permissions: {}` and receives no repository secrets. Leaving `probe-workflow` empty retains inventory mode and its credential requirements.
+V3 probe mode requires only the normal short-lived workflow token with `actions: write` on the selector job. The helper has `permissions: {}` and receives no repository secrets. The `mode` input explicitly selects PAT or probe; `auto` retains compatibility by selecting probe only when `probe-workflow` is supplied.
 
-Document and preserve both generations: `1.0.0` / `v1.0.0` / `v1` for inventory discovery without another job, and `2.0.0` / `v2.0.0` / `v2` for the probe-capable generation. V2 must not move any v1 tag.
+Maintain one current generation: `3.0.0` / `v3.0.0` / `v3`, supporting both PAT and probe modes. Preserve every existing v1 and v2 release/tag unchanged for old workflows.
 
 ---
 
@@ -528,9 +535,13 @@ CHANGELOG.md
 ```
 
 
-## Secretless probe mode (v2)
+## Unified v3 discovery modes
 
-- The optional `probe-workflow` input dispatches a minimal helper in the same repository using only the short-lived `GITHUB_TOKEN` with `actions: write`.
+- Explicit `mode: pat` always queries runner inventory using the supplied runner-read token, even if probe inputs are present. It never dispatches a helper.
+- Explicit `mode: probe` uses the configured helper, defaulting to `available-runner-probe.yml`.
+- Default `mode: auto` selects probe when `probe-workflow` is supplied; otherwise it selects PAT inventory. Invalid modes fail before API calls.
+- Neither method falls through to the other after an error; use the normal hosted fallback or `fail-if-no-runner`.
+- In probe mode, `probe-workflow` dispatches a minimal helper in the same repository using only the short-lived `GITHUB_TOKEN` with `actions: write`.
 - Successful helper completion within a bounded 5–300 second window is evidence that a matching runner accepted work. No runner inventory API is called in this mode.
 - Preserve existing runner/fallback outputs and `fail-if-no-runner`. `require-idle` remains an inventory-mode setting; probes measure dispatch latency instead.
 - Correlate the exact child run using dispatch response details or a unique `probe-id` run title. Never cancel the parent or an unrelated workflow run.

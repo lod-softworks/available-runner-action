@@ -324,14 +324,18 @@ describe('run()', () => {
 
   beforeEach(() => {
     Object.defineProperty(github, 'context', {
-      value: { repo: { owner: 'test-owner', repo: 'test-repo' } },
+      value: {
+        repo: { owner: 'test-owner', repo: 'test-repo' },
+        payload: { repository: { default_branch: 'main' } },
+        runId: 99,
+      },
       writable: true,
       configurable: true,
     });
   });
 
   it.each([true, false])('uses the probe without requesting runner inventory (available=%s)', async available => {
-    setupInputs({ 'probe-workflow': 'available-runner-probe.yml', 'probe-ref': 'main' });
+    setupInputs({ mode: 'auto', 'probe-workflow': 'available-runner-probe.yml', 'probe-ref': 'main' });
     const api = makeOctokit([]);
     (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
     (probeRunner as jest.Mock).mockResolvedValue({ available, diagnostics: 'Probe completed' });
@@ -340,6 +344,61 @@ describe('run()', () => {
     expect(api.rest.actions.listSelfHostedRunnersForOrg).not.toHaveBeenCalled();
     expect(mockSetOutput).toHaveBeenCalledWith('selected-type', available ? 'self-hosted' : 'github-hosted');
     expect(mockSetOutput).toHaveBeenCalledWith('diagnostics', expect.stringContaining('Probe completed'));
+  });
+
+  it('uses explicit PAT mode without dispatching a probe even when a helper is configured', async () => {
+    setupInputs({ mode: 'pat', 'github-token': 'runner-read-token', 'probe-workflow': 'unused.yml' });
+    const api = makeOctokit([makeRunner()]);
+    (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
+    await run();
+    expect(mockGithub.getOctokit).toHaveBeenCalledWith('runner-read-token');
+    expect(api.rest.actions.listSelfHostedRunnersForRepo).toHaveBeenCalled();
+    expect(api.rest.actions.listSelfHostedRunnersForOrg).toHaveBeenCalled();
+    expect(probeRunner).not.toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'self-hosted');
+  });
+
+  it.each([true, false])('uses explicit probe mode with the conventional helper (available=%s)', async available => {
+    setupInputs({ mode: 'probe' });
+    const api = makeOctokit([]);
+    (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
+    (probeRunner as jest.Mock).mockResolvedValue({ available, diagnostics: 'Probe completed' });
+    await run();
+    expect(probeRunner).toHaveBeenCalledWith(api, expect.objectContaining({
+      workflow: 'available-runner-probe.yml', ref: 'main', parentRunId: 99,
+    }));
+    expect(api.rest.actions.listSelfHostedRunnersForRepo).not.toHaveBeenCalled();
+    expect(api.rest.actions.listSelfHostedRunnersForOrg).not.toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', available ? 'self-hosted' : 'github-hosted');
+  });
+
+  it.each(['inventory', 'invalid'])('fails invalid mode %s before making API calls', async mode => {
+    setupInputs({ mode });
+    await run();
+    expect(mockSetFailed).toHaveBeenCalledWith('mode must be one of: auto, pat, probe');
+    expect(mockGithub.getOctokit).not.toHaveBeenCalled();
+    expect(probeRunner).not.toHaveBeenCalled();
+    expect(mockSetOutput).not.toHaveBeenCalled();
+  });
+
+  it('honors fail-if-no-runner in explicit probe mode without querying inventory', async () => {
+    setupInputs({ mode: 'probe', 'fail-if-no-runner': 'true' });
+    const api = makeOctokit([]);
+    (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
+    (probeRunner as jest.Mock).mockResolvedValue({ available: false, diagnostics: 'Timed out' });
+    await run();
+    expect(mockSetFailed).toHaveBeenCalledWith(expect.stringContaining('self-hosted'));
+    expect(mockSetOutput).not.toHaveBeenCalled();
+    expect(api.rest.actions.listSelfHostedRunnersForRepo).not.toHaveBeenCalled();
+  });
+
+  it('falls back in PAT mode after inventory errors without trying probe mode', async () => {
+    setupInputs({ mode: 'pat' });
+    const api = makeOctokit([], [], new Error('Forbidden'), new Error('Forbidden'));
+    (mockGithub.getOctokit as jest.Mock).mockReturnValue(api);
+    await run();
+    expect(probeRunner).not.toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith('selected-type', 'github-hosted');
   });
 
   it('sets self-hosted outputs when a matching runner is available', async () => {
