@@ -30231,10 +30231,20 @@ async function probeRunner(octokit, options) {
                 throw new Error('Could not identify the dispatched probe. Check the helper workflow run-name and cancel any orphaned probe.');
         }
         while (Date.now() < deadline) {
-            const { data: run } = await octokit.rest.actions.getWorkflowRun({
-                owner: options.owner, repo: options.repo, run_id: runId,
-                request: { signal: controller.signal, timeout: 10000 },
-            });
+            let run;
+            try {
+                ({ data: run } = await octokit.rest.actions.getWorkflowRun({
+                    owner: options.owner, repo: options.repo, run_id: runId,
+                    request: { signal: controller.signal, timeout: 10000 },
+                }));
+            }
+            catch (error) {
+                // Dispatch can return an ID before the run becomes readable.
+                if (error.status !== 404)
+                    throw error;
+                await (0, promises_1.setTimeout)(Math.min(2000, Math.max(1, deadline - Date.now())), undefined, { signal: controller.signal });
+                continue;
+            }
             if (run.status === 'completed') {
                 completed = true;
                 return {

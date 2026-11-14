@@ -50,6 +50,26 @@ describe('workflow runner probe', () => {
     expect(now).toBe(6000);
   });
 
+  it('retries a newly dispatched run that is not readable yet', async () => {
+    const api = client();
+    api.rest.actions.getWorkflowRun.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }));
+    const result = await probeRunner(api as unknown as ReturnType<typeof github.getOctokit>, options);
+    expect(result.available).toBe(true);
+    expect(api.rest.actions.getWorkflowRun).toHaveBeenCalledTimes(2);
+    expect(api.rest.actions.cancelWorkflowRun).not.toHaveBeenCalled();
+    expect(now).toBe(3000);
+  });
+
+  it('bounds retries when the dispatched run remains unreadable', async () => {
+    const api = client();
+    api.rest.actions.getWorkflowRun.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
+    const result = await probeRunner(api as unknown as ReturnType<typeof github.getOctokit>, options);
+    expect(result.available).toBe(false);
+    expect(result.diagnostics).toContain('5 seconds');
+    expect(api.rest.actions.cancelWorkflowRun).toHaveBeenCalledWith(expect.objectContaining({ run_id: 101 }));
+    expect(now).toBe(6000);
+  });
+
   it('falls back for a failed completed probe without cancelling completed work', async () => {
     const api = client();
     api.rest.actions.getWorkflowRun.mockResolvedValue({ data: { status: 'completed', conclusion: 'failure' } });
